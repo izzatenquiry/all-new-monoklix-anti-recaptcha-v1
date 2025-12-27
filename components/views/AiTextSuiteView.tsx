@@ -37,7 +37,7 @@ const AiTextSuiteView: React.FC<AiTextSuiteViewProps> = ({ currentUser, language
 
     return (
         <div className="h-auto lg:h-full flex flex-col">
-            <div className="flex-shrink-0 mb-6 flex justify-center">
+            <div className="flex-shrink-0 mb-2 sm:mb-4 lg:mb-6 flex justify-center">
                 <Tabs 
                     tabs={tabs}
                     activeTab={activeTab}

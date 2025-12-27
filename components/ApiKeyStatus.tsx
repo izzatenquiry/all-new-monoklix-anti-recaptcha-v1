@@ -8,7 +8,6 @@ import { saveUserPersonalAuthToken, assignPersonalTokenAndIncrementUsage, getUse
 import { runComprehensiveTokenTest, type TokenTestResult } from '../services/imagenV3Service';
 import { getTranslations } from '../services/translations';
 import eventBus from '../services/eventBus';
-import { testAntiCaptchaKey } from '../services/antiCaptchaService';
 
 // --- NEW: Token Selection Modal ---
 interface TokenSelectionModalProps {
@@ -269,17 +268,12 @@ const ApiKeyStatus: React.FC<ApiKeyStatusProps> = ({ activeApiKey, currentUser, 
     const [showPersonalToken, setShowPersonalToken] = useState(false);
     const [isRefreshing, setIsRefreshing] = useState(false);
     
-    // Anti-Captcha Configuration State
-    const [enableAntiCaptcha, setEnableAntiCaptcha] = useState(() => {
-        return localStorage.getItem('antiCaptchaEnabled') === 'true';
-    });
+    // Anti-Captcha Configuration State - Auto enabled
     const [antiCaptchaApiKey, setAntiCaptchaApiKey] = useState(() => {
         return localStorage.getItem('antiCaptchaApiKey') || '';
     });
     const [showAntiCaptchaKey, setShowAntiCaptchaKey] = useState(false);
     const [antiCaptchaSaveStatus, setAntiCaptchaSaveStatus] = useState<'idle' | 'saving' | 'success' | 'error'>('idle');
-    const [antiCaptchaTestStatus, setAntiCaptchaTestStatus] = useState<'idle' | 'testing' | 'success' | 'error'>('idle');
-    const [antiCaptchaTestMessage, setAntiCaptchaTestMessage] = useState<string>('');
     
     useEffect(() => {
         if (isPopoverOpen) {
@@ -354,10 +348,10 @@ const ApiKeyStatus: React.FC<ApiKeyStatusProps> = ({ activeApiKey, currentUser, 
         }
     };
 
-    // Save Anti-Captcha settings to localStorage
+    // Auto-enable Anti-Captcha (always enabled)
     useEffect(() => {
-        localStorage.setItem('antiCaptchaEnabled', enableAntiCaptcha.toString());
-    }, [enableAntiCaptcha]);
+        localStorage.setItem('antiCaptchaEnabled', 'true');
+    }, []);
 
     useEffect(() => {
         localStorage.setItem('antiCaptchaApiKey', antiCaptchaApiKey);
@@ -377,40 +371,6 @@ const ApiKeyStatus: React.FC<ApiKeyStatusProps> = ({ activeApiKey, currentUser, 
                 setAntiCaptchaSaveStatus('idle');
             }, 2000);
         }
-    };
-
-    const handleTestAntiCaptcha = async () => {
-        if (!antiCaptchaApiKey.trim()) {
-            setAntiCaptchaTestStatus('error');
-            setAntiCaptchaTestMessage('Please enter an API key');
-            setTimeout(() => {
-                setAntiCaptchaTestStatus('idle');
-                setAntiCaptchaTestMessage('');
-            }, 3000);
-            return;
-        }
-
-        setAntiCaptchaTestStatus('testing');
-        setAntiCaptchaTestMessage('Testing API key...');
-
-        try {
-            const result = await testAntiCaptchaKey(antiCaptchaApiKey.trim());
-            if (result.valid) {
-                setAntiCaptchaTestStatus('success');
-                setAntiCaptchaTestMessage('✅ API key is valid!');
-            } else {
-                setAntiCaptchaTestStatus('error');
-                setAntiCaptchaTestMessage(`❌ ${result.error || 'Invalid API key'}`);
-            }
-        } catch (error) {
-            setAntiCaptchaTestStatus('error');
-            setAntiCaptchaTestMessage(`❌ ${error instanceof Error ? error.message : 'Test failed'}`);
-        }
-
-        setTimeout(() => {
-            setAntiCaptchaTestStatus('idle');
-            setAntiCaptchaTestMessage('');
-        }, 5000);
     };
 
 
@@ -454,7 +414,7 @@ const ApiKeyStatus: React.FC<ApiKeyStatusProps> = ({ activeApiKey, currentUser, 
             </button>
 
             {isPopoverOpen && (
-                <div className="absolute top-full right-0 mt-2 w-80 sm:w-96 bg-white dark:bg-neutral-900 border border-neutral-200 dark:border-neutral-700 rounded-lg shadow-xl z-20 animate-zoomIn p-4">
+                <div className="absolute top-full right-0 mt-2 w-80 sm:w-96 bg-white dark:bg-neutral-900 border-[0.5px] border-neutral-200/80 dark:border-neutral-700/80 rounded-lg shadow-xl z-20 animate-zoomIn p-4">
                     <div className="flex justify-between items-center mb-4">
                         <h3 className="font-bold text-lg">{T.title}</h3>
                         <button onClick={() => setIsPopoverOpen(false)} className="p-1 rounded-full hover:bg-neutral-100 dark:hover:bg-neutral-800"><XIcon className="w-4 h-4" /></button>
@@ -470,27 +430,29 @@ const ApiKeyStatus: React.FC<ApiKeyStatusProps> = ({ activeApiKey, currentUser, 
                             )}
                         </div>
                         
-                        {/* Current Server Row - Restored "Change Server" Button */}
-                        <div className="p-2 bg-neutral-100 dark:bg-neutral-800 rounded-md flex justify-between items-center">
-                            <div className="flex items-center gap-2">
-                                <span className="font-semibold text-neutral-600 dark:text-neutral-300 whitespace-nowrap">{T.currentServer}:</span>
-                                {currentServer ? (
-                                    <span className="font-mono text-xs bg-blue-100 text-blue-800 dark:bg-blue-900/50 dark:text-blue-300 px-2 py-1 rounded">
-                                        {currentServer.replace('https://', '').replace('.monoklix.com', '').toUpperCase()}
-                                    </span>
-                                ) : (
-                                    <span className="text-yellow-500 font-semibold text-xs">{T.notSet}</span>
-                                )}
+                        {/* Current Server Row - With Change Button at the end */}
+                        <div className="p-2 bg-neutral-100 dark:bg-neutral-800 rounded-md">
+                            <div className="flex justify-between items-center gap-2">
+                                <div className="flex items-center gap-2 overflow-hidden flex-1">
+                                    <span className="font-semibold text-neutral-600 dark:text-neutral-300 whitespace-nowrap">{T.currentServer}:</span>
+                                    {currentServer ? (
+                                        <span className="font-mono text-xs bg-blue-100 text-blue-800 dark:bg-blue-900/50 dark:text-blue-300 px-2 py-1 rounded truncate">
+                                            {currentServer.replace('https://', '').replace('http://', '').replace('.monoklix.com', '').toUpperCase()}
+                                        </span>
+                                    ) : (
+                                        <span className="text-yellow-500 font-semibold text-xs whitespace-nowrap">{T.notSet}</span>
+                                    )}
+                                </div>
+                                <button
+                                    onClick={() => {
+                                        onOpenChangeServerModal();
+                                        setIsPopoverOpen(false);
+                                    }}
+                                    className="text-xs font-semibold bg-primary-600 text-white px-3 py-1.5 rounded-md hover:bg-primary-700 transition-colors flex-shrink-0"
+                                >
+                                    {T.changeServer.replace(' Server', '')}
+                                </button>
                             </div>
-                            <button
-                                onClick={() => {
-                                    onOpenChangeServerModal();
-                                    setIsPopoverOpen(false);
-                                }}
-                                className="text-xs font-semibold bg-primary-600 text-white px-3 py-1.5 rounded-md hover:bg-primary-700 transition-colors"
-                            >
-                                {T.changeServer.replace(' Server', '')}
-                            </button>
                         </div>
 
                         {/* Auth Token Row */}
@@ -503,7 +465,7 @@ const ApiKeyStatus: React.FC<ApiKeyStatusProps> = ({ activeApiKey, currentUser, 
                                             type={showPersonalToken ? "text" : "password"}
                                             value={tokenInput} 
                                             onChange={(e) => setTokenInput(e.target.value)} 
-                                            className="w-full text-xs font-mono bg-white dark:bg-neutral-700 rounded p-1 pr-8 border border-neutral-300 dark:border-neutral-600 focus:ring-1 focus:ring-primary-500"
+                                            className="w-full text-xs font-mono bg-white dark:bg-neutral-700 rounded p-1 pr-8 border-[0.5px] border-neutral-300/80 dark:border-neutral-600/80 focus:ring-1 focus:ring-primary-500"
                                             placeholder={T.enterToken}
                                             autoFocus
                                         />
@@ -539,7 +501,7 @@ const ApiKeyStatus: React.FC<ApiKeyStatusProps> = ({ activeApiKey, currentUser, 
                                     <div className="flex items-center gap-2 flex-shrink-0">
                                         <button 
                                             onClick={handleRefreshToken}
-                                            className="p-1.5 text-neutral-500 hover:text-primary-600 dark:hover:text-primary-400 bg-white dark:bg-neutral-700 border border-neutral-200 dark:border-neutral-600 rounded-md transition-colors"
+                                            className="p-1.5 text-neutral-500 hover:text-primary-600 dark:hover:text-primary-400 bg-white dark:bg-neutral-700 border-[0.5px] border-neutral-200/80 dark:border-neutral-600/80 rounded-md transition-colors"
                                             title="Refresh token from database"
                                         >
                                             <RefreshCwIcon className={`w-3.5 h-3.5 ${isRefreshing ? 'animate-spin text-primary-600' : ''}`} />
@@ -556,99 +518,63 @@ const ApiKeyStatus: React.FC<ApiKeyStatusProps> = ({ activeApiKey, currentUser, 
                         </div>
                     </div>
 
-                    {/* Anti-Captcha Configuration */}
-                    <div className="mt-4 pt-4 border-t border-neutral-200 dark:border-neutral-700">
+                    {/* Anti-Captcha Configuration - Auto Enabled */}
+                    <div className="mt-4 pt-4 border-t-[0.5px] border-neutral-200/80 dark:border-neutral-700/80">
                         <h4 className="text-sm font-bold mb-3 text-neutral-700 dark:text-neutral-300 flex items-center gap-2">
                             <KeyIcon className="w-4 h-4 text-primary-500" />
                             Anti-Captcha Configuration
                         </h4>
                         
-                        <div className="p-3 bg-yellow-50 dark:bg-yellow-900/20 rounded-lg border border-yellow-100 dark:border-yellow-800 mb-3">
+                        <div className="p-3 bg-yellow-50 dark:bg-yellow-900/20 rounded-lg border-[0.5px] border-yellow-100/80 dark:border-yellow-800/80 mb-3">
                             <div className="flex items-start gap-2">
                                 <InformationCircleIcon className="w-4 h-4 text-yellow-600 dark:text-yellow-400 flex-shrink-0 mt-0.5" />
                                 <div className="text-xs text-yellow-800 dark:text-yellow-200">
                                     <p className="font-semibold mb-1">Required for Video/Image Generation</p>
-                                    <p>Google API requires reCAPTCHA v3 Enterprise tokens. Enable this to automatically solve captchas using <a href="https://anti-captcha.com" target="_blank" rel="noopener noreferrer" className="underline font-semibold">anti-captcha.com</a> service.</p>
+                                    <p>Google API requires reCAPTCHA v3 Enterprise tokens. Automatically solve captchas using <a href="https://anti-captcha.com" target="_blank" rel="noopener noreferrer" className="underline font-semibold">anti-captcha.com</a> service.</p>
                                 </div>
                             </div>
                         </div>
 
-                        {/* Enable Toggle */}
-                        <div className="mb-3">
-                            <label className="flex items-center gap-2 cursor-pointer">
-                                <input
-                                    type="checkbox"
-                                    checked={enableAntiCaptcha}
-                                    onChange={(e) => setEnableAntiCaptcha(e.target.checked)}
-                                    className="w-4 h-4 text-primary-600 bg-neutral-100 border-neutral-300 rounded focus:ring-primary-500 dark:focus:ring-primary-600 dark:ring-offset-neutral-800 focus:ring-2 dark:bg-neutral-700 dark:border-neutral-600"
-                                />
-                                <span className="text-xs font-medium text-neutral-700 dark:text-neutral-300">
-                                    Enable Anti-Captcha Integration
-                                </span>
+                        {/* API Key Input with Save Button at the end */}
+                        <div>
+                            <label className="block text-xs font-medium text-neutral-700 dark:text-neutral-300 mb-1">
+                                Anti-Captcha API Key *
                             </label>
-                        </div>
-
-                        {enableAntiCaptcha && (
-                            <div className="space-y-3 pl-4 border-l-2 border-primary-200 dark:border-primary-800">
-                                {/* API Key Input */}
-                                <div>
-                                    <label className="block text-xs font-medium text-neutral-700 dark:text-neutral-300 mb-1">
-                                        Anti-Captcha API Key *
-                                    </label>
-                                    <div className="relative">
-                                        <input
-                                            type={showAntiCaptchaKey ? 'text' : 'password'}
-                                            value={antiCaptchaApiKey}
-                                            onChange={(e) => setAntiCaptchaApiKey(e.target.value)}
-                                            placeholder="Enter your anti-captcha.com API key"
-                                            className="w-full text-xs font-mono bg-neutral-50 dark:bg-neutral-800 border border-neutral-300 dark:border-neutral-700 rounded-lg p-2 pr-8 focus:ring-2 focus:ring-primary-500 focus:border-primary-500 transition-colors"
-                                        />
-                                        <button
-                                            onClick={() => setShowAntiCaptchaKey(!showAntiCaptchaKey)}
-                                            className="absolute inset-y-0 right-0 px-2 flex items-center text-neutral-500 hover:text-neutral-700 dark:hover:text-neutral-300"
-                                        >
-                                            {showAntiCaptchaKey ? <EyeOffIcon className="w-3.5 h-3.5"/> : <EyeIcon className="w-3.5 h-3.5"/>}
-                                        </button>
-                                    </div>
-                                    <p className="text-[10px] text-neutral-500 dark:text-neutral-400 mt-1">
-                                        Get your API key from <a href="https://anti-captcha.com/clients/settings/apisetup" target="_blank" rel="noopener noreferrer" className="text-primary-600 hover:underline">anti-captcha.com dashboard</a>
-                                    </p>
-                                </div>
-
-                                {/* Test and Save Buttons */}
-                                <div className="flex items-center gap-2 flex-wrap">
+                            <div className="flex items-center gap-2">
+                                <div className="relative flex-1">
+                                    <input
+                                        type={showAntiCaptchaKey ? 'text' : 'password'}
+                                        value={antiCaptchaApiKey}
+                                        onChange={(e) => setAntiCaptchaApiKey(e.target.value)}
+                                        placeholder="Enter your anti-captcha.com API key"
+                                        className="w-full text-xs font-mono bg-neutral-50 dark:bg-neutral-800 border-[0.5px] border-neutral-300/80 dark:border-neutral-700/80 rounded-lg p-2 pr-8 focus:ring-2 focus:ring-primary-500 focus:border-primary-500 transition-colors"
+                                    />
                                     <button
-                                        onClick={handleTestAntiCaptcha}
-                                        disabled={!antiCaptchaApiKey || antiCaptchaTestStatus === 'testing'}
-                                        className="px-3 py-1.5 bg-primary-600 text-white text-xs font-semibold rounded-lg hover:bg-primary-700 transition-colors disabled:opacity-50 flex items-center gap-1.5"
+                                        onClick={() => setShowAntiCaptchaKey(!showAntiCaptchaKey)}
+                                        className="absolute inset-y-0 right-0 px-2 flex items-center text-neutral-500 hover:text-neutral-700 dark:hover:text-neutral-300"
                                     >
-                                        {antiCaptchaTestStatus === 'testing' ? <Spinner /> : <SparklesIcon className="w-3.5 h-3.5" />}
-                                        Test
+                                        {showAntiCaptchaKey ? <EyeOffIcon className="w-3.5 h-3.5"/> : <EyeIcon className="w-3.5 h-3.5"/>}
                                     </button>
-                                    <button
-                                        onClick={handleSaveAntiCaptcha}
-                                        disabled={antiCaptchaSaveStatus === 'saving'}
-                                        className="px-3 py-1.5 bg-green-600 text-white text-xs font-semibold rounded-lg hover:bg-green-700 transition-colors disabled:opacity-50 flex items-center gap-1.5"
-                                    >
-                                        {antiCaptchaSaveStatus === 'saving' ? <Spinner /> : 'Save'}
-                                    </button>
-                                    {antiCaptchaSaveStatus === 'success' && <span className="text-xs text-green-600 font-bold">Saved!</span>}
-                                    {antiCaptchaSaveStatus === 'error' && <span className="text-xs text-red-500 font-bold">Error</span>}
-                                    {antiCaptchaTestMessage && (
-                                        <span className={`text-xs font-medium ${
-                                            antiCaptchaTestStatus === 'success' ? 'text-green-600' :
-                                            antiCaptchaTestStatus === 'error' ? 'text-red-600' :
-                                            'text-neutral-600'
-                                        }`}>
-                                            {antiCaptchaTestMessage}
-                                        </span>
-                                    )}
                                 </div>
+                                <button
+                                    onClick={handleSaveAntiCaptcha}
+                                    disabled={antiCaptchaSaveStatus === 'saving'}
+                                    className="text-xs font-semibold bg-primary-600 text-white px-3 py-2 rounded-md hover:bg-primary-700 transition-colors disabled:opacity-50 flex items-center gap-1.5 flex-shrink-0"
+                                >
+                                    {antiCaptchaSaveStatus === 'saving' ? <Spinner /> : T.save}
+                                </button>
                             </div>
-                        )}
+                            <div className="flex items-center justify-between mt-1">
+                                <p className="text-[10px] text-neutral-500 dark:text-neutral-400">
+                                    Get your API key from <a href="https://anti-captcha.com/clients/settings/apisetup" target="_blank" rel="noopener noreferrer" className="text-primary-600 hover:underline">anti-captcha.com dashboard</a>
+                                </p>
+                                {antiCaptchaSaveStatus === 'success' && <span className="text-xs text-green-600 font-bold">{T.saved}</span>}
+                                {antiCaptchaSaveStatus === 'error' && <span className="text-xs text-red-500 font-bold">{T.saveError}</span>}
+                            </div>
+                        </div>
                     </div>
 
-                    <div className="mt-4 pt-4 border-t border-neutral-200 dark:border-neutral-700">
+                    <div className="mt-4 pt-4 border-t-[0.5px] border-neutral-200/80 dark:border-neutral-700/80">
                         <div className="grid grid-cols-2 gap-3">
                              <button
                                 onClick={handleHealthCheck}

@@ -311,7 +311,7 @@ const App: React.FC = () => {
 
         <main className="flex-1 flex flex-col min-w-0 md:pl-24 lg:pl-28 transition-all duration-300 relative z-10 h-full">
             {/* Header (Full Width "Full Petak") */}
-            <header className="sticky top-0 z-30 w-full border-b border-neutral-200 dark:border-white/10 bg-white/80 dark:bg-[#050505]/80 backdrop-blur-xl shrink-0">
+            <header className="sticky top-0 z-30 w-full border-b-[0.5px] border-neutral-200/80 dark:border-white/5 bg-white/80 dark:bg-[#050505]/80 backdrop-blur-xl shrink-0">
                 <div className="w-full px-4 py-3 md:px-6 flex items-center justify-between">
                     {/* Mobile Logo Left (Rail handles desktop logo) */}
                     <div className="md:hidden font-black text-xl tracking-tighter flex items-center gap-2 text-neutral-900 dark:text-white">
@@ -328,7 +328,7 @@ const App: React.FC = () => {
                     <div className="flex items-center gap-3 ml-auto">
                         
                         {/* Operational Status */}
-                        <div className="hidden md:flex items-center gap-2 text-[10px] font-bold text-green-600 dark:text-green-400 bg-green-100 dark:bg-green-900/20 px-3 py-1.5 rounded-full border border-green-300 dark:border-green-500/20">
+                        <div className="hidden md:flex items-center gap-2 text-[10px] font-bold text-green-600 dark:text-green-400 bg-green-100 dark:bg-green-900/20 px-3 py-1.5 rounded-full border-[0.5px] border-green-300/80 dark:border-green-500/20">
                             <span className="relative flex h-2 w-2">
                               <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-500 dark:bg-green-400 opacity-75"></span>
                               <span className="relative inline-flex rounded-full h-2 w-2 bg-green-500"></span>
@@ -382,7 +382,7 @@ const App: React.FC = () => {
 
             {/* Main Content Area - Responsive scrolling behavior */}
             {/* UPDATED: Removed fixed overflow to allow natural page scrolling on desktop */}
-            <div className="flex-1 overflow-y-auto overflow-x-hidden p-4 md:p-8 custom-scrollbar">
+            <div className="flex-1 overflow-y-auto overflow-x-hidden p-2 sm:p-3 md:p-6 lg:p-8 custom-scrollbar">
                 {/* Announcement Banner (Holographic Marquee) */}
                 {activeView === 'home' && announcements.length > 0 && (
                      <div className="mb-6 mx-auto max-w-[1600px] w-full bg-brand-start/10 dark:bg-brand-start/10 border border-brand-start/20 text-neutral-900 dark:text-white p-2 rounded-xl shadow-[0_0_15px_rgba(74,108,247,0.2)] flex items-center gap-3 animate-zoomIn relative overflow-hidden group">

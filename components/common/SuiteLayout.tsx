@@ -13,7 +13,7 @@ const SuiteLayout: React.FC<SuiteLayoutProps> = ({ title, subtitle, icon: Icon, 
         <div className="w-full max-w-[1600px] mx-auto flex flex-col md:pb-6 relative">
             {/* Content Container - Holo Card */}
             {/* UPDATED: Removed fixed h-full and overflow-hidden to allow content to expand */}
-            <div className="flex-1 holo-card p-6 flex flex-col relative z-10 animate-zoomIn" style={{ animationDelay: '100ms' }}>
+            <div className="flex-1 holo-card p-3 sm:p-4 lg:p-6 flex flex-col relative z-10 animate-zoomIn" style={{ animationDelay: '100ms' }}>
                 {/* Subtle grid pattern overlay */}
                 <div className="absolute inset-0 pointer-events-none opacity-5" style={{ backgroundImage: 'linear-gradient(rgba(255,255,255,0.1) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.1) 1px, transparent 1px)', backgroundSize: '40px 40px' }}></div>
                 

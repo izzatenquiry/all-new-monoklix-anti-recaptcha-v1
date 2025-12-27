@@ -134,7 +134,11 @@ const FlowLogin: React.FC<FlowLoginProps> = ({ currentUser, onUserUpdate }) => {
     };
 
     const handleOpenFlow = () => {
-        window.open('https://labs.google/fx/tools/flow', '_blank');
+        window.open('https://labs.google/fx/tools/flow', '_blank', 'width=800,height=600,scrollbars=yes,resizable=yes');
+    };
+
+    const handleGetToken = () => {
+        window.open('https://labs.google/fx/api/auth/session', '_blank', 'width=800,height=600,scrollbars=yes,resizable=yes');
     };
 
     const handleTestToken = useCallback(async () => {
@@ -369,24 +373,31 @@ const FlowLogin: React.FC<FlowLoginProps> = ({ currentUser, onUserUpdate }) => {
                     <div className="flex items-center gap-3 flex-wrap">
                         <button
                             onClick={handleOpenFlow}
-                            className="flex items-center justify-center gap-2 bg-neutral-200 dark:bg-neutral-700 text-neutral-700 dark:text-neutral-200 font-semibold py-2 px-4 rounded-lg hover:bg-neutral-300 dark:hover:bg-neutral-600 transition-colors"
+                            className="flex items-center justify-center gap-2 bg-neutral-200 dark:bg-neutral-700 text-neutral-700 dark:text-neutral-200 text-sm font-semibold py-2 px-4 rounded-lg hover:bg-neutral-300 dark:hover:bg-neutral-600 transition-colors shadow-[0px_4px_12px_0px_rgba(0,0,0,0.15)]"
                         >
                             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
                             </svg>
-                            Open Google Flow
+                            Login Google Flow
+                        </button>
+                        <button
+                            onClick={handleGetToken}
+                            className="flex items-center justify-center gap-2 bg-primary-600 dark:bg-primary-700 text-white text-sm font-semibold py-2 px-4 rounded-lg hover:bg-primary-700 dark:hover:bg-primary-600 transition-colors"
+                        >
+                            <KeyIcon className="w-4 h-4" />
+                            Get Token
                         </button>
                         <button
                             onClick={handleSaveToken}
                             disabled={isSaving || !flowToken.trim()}
-                            className="px-4 py-2 bg-primary-600 text-white text-sm font-semibold rounded-lg hover:bg-primary-700 transition-colors disabled:opacity-50 flex items-center gap-2"
+                            className="flex items-center justify-center gap-2 px-4 py-2 bg-primary-600 text-white text-sm font-semibold rounded-lg hover:bg-primary-700 transition-colors disabled:opacity-50"
                         >
                             {isSaving ? <Spinner /> : T_Api.save}
                         </button>
                         <button
                             onClick={handleTestToken}
                             disabled={(!flowToken.trim() && !currentUser?.personalAuthToken) || testStatus === 'testing'}
-                            className="px-4 py-2 bg-blue-600 text-white text-sm font-semibold rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50 flex items-center gap-2"
+                            className="flex items-center justify-center gap-2 px-4 py-2 bg-blue-600 text-white text-sm font-semibold rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50"
                         >
                             {testStatus === 'testing' ? <Spinner /> : <SparklesIcon className="w-4 h-4" />}
                             {T_Api.runTest}
@@ -403,18 +414,6 @@ const FlowLogin: React.FC<FlowLoginProps> = ({ currentUser, onUserUpdate }) => {
                             </span>
                         )}
                     </div>
-
-                    {currentUser?.personalAuthToken && (
-                        <div className="mt-4 p-4 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg">
-                            <div className="flex items-center gap-2 mb-2">
-                                <CheckCircleIcon className="w-5 h-5 text-blue-600 dark:text-blue-400" />
-                                <span className="font-semibold text-blue-800 dark:text-blue-200">Current Token</span>
-                            </div>
-                            <p className="text-xs font-mono text-blue-700 dark:text-blue-300 break-all">
-                                {showToken ? currentUser.personalAuthToken : `...${currentUser.personalAuthToken.slice(-8)}`}
-                            </p>
-                        </div>
-                    )}
                 </div>
 
                 <div className="mt-6 pt-6 border-t border-neutral-200 dark:border-neutral-700">
@@ -423,13 +422,11 @@ const FlowLogin: React.FC<FlowLoginProps> = ({ currentUser, onUserUpdate }) => {
                         <div className="text-sm text-blue-800 dark:text-blue-200">
                             <p className="font-semibold mb-2">Cara Mengambil Token dari Flow:</p>
                             <ol className="text-xs space-y-1 list-decimal list-inside">
-                                <li>Klik tombol "Open Google Flow" di atas</li>
-                                <li>Login ke akun Google Flow Anda</li>
-                                <li>Buka Developer Tools (F12) → Network tab</li>
-                                <li>Lakukan action apapun di Flow (generate video/image)</li>
-                                <li>Cari request ke API, lihat header "Authorization: Bearer [TOKEN]"</li>
-                                <li>Copy token tersebut dan paste di form di atas</li>
+                                <li>Klik tombol "Get Token" untuk membuka halaman session API</li>
+                                <li>Copy token dari response JSON yang muncul</li>
+                                <li>Paste token tersebut di form di atas</li>
                                 <li>Klik "Save Token" untuk menyimpan</li>
+                                <li className="mt-2 text-neutral-600 dark:text-neutral-400">Atau gunakan cara manual: Klik "Login Google Flow" → Login → Buka Developer Tools (F12) → Network tab → Cari request API → Copy token dari header Authorization</li>
                             </ol>
                         </div>
                     </div>

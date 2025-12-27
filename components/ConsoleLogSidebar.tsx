@@ -58,7 +58,7 @@ const ConsoleLogSidebar: React.FC<ConsoleLogSidebarProps> = ({ isOpen, onClose }
       {/* Sidebar Panel - Higher Z-Index to overlap Mobile Dock */}
       <aside
         className={`fixed inset-y-4 right-4 z-[80] w-80 lg:w-96
-                   bg-[#0a0a0a]/95 backdrop-blur-2xl border border-white/10 shadow-[0_0_50px_rgba(0,0,0,0.5)] rounded-3xl
+                   bg-[#0a0a0a]/95 backdrop-blur-2xl border-[0.5px] border-white/5 shadow-[0_0_50px_rgba(0,0,0,0.5)] rounded-3xl
                    flex flex-col overflow-hidden transition-transform duration-500 cubic-bezier(0.2, 0.8, 0.2, 1)
                    ${isOpen ? 'translate-x-0' : 'translate-x-[120%]'}
                    `}

@@ -443,12 +443,7 @@ const GalleryView: React.FC<GalleryViewProps> = ({ onCreateVideo, onReEdit, lang
 
     return (
         <div className="h-full flex flex-col">
-            <div className="flex-shrink-0">
-                <h1 className="text-xl font-bold sm:text-3xl">{T.title}</h1>
-                <p className="text-sm sm:text-base text-neutral-500 dark:text-neutral-400 mt-1">{T.subtitle}</p>
-            </div>
-            
-            <div className="flex-shrink-0 my-6 flex justify-center">
+            <div className="flex-shrink-0 mb-6 flex justify-center">
                 <Tabs 
                     tabs={tabs}
                     activeTab={activeTab}

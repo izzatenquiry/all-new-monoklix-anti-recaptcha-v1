@@ -43,7 +43,7 @@
 
   /* The "Holo-Card" - Used for main containers */
   .holo-card {
-    @apply bg-white dark:bg-[#121212]/60 backdrop-blur-xl border border-neutral-200 dark:border-white/5 rounded-[2rem] shadow-2xl transition-all duration-300 relative overflow-hidden;
+    @apply bg-white dark:bg-[#121212]/60 backdrop-blur-xl border-[0.5px] border-neutral-200/80 dark:border-white/5 rounded-[2rem] shadow-2xl transition-all duration-300 relative overflow-hidden;
     box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.05), 0 8px 32px rgba(0, 0, 0, 0.1);
   }
   

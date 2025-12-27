@@ -452,11 +452,7 @@ const SettingsView: React.FC<SettingsViewProps> = ({ currentUser, tempApiKey, on
 
     return (
         <div className="h-full flex flex-col">
-            <div className="flex-shrink-0">
-                <h1 className="text-2xl font-bold sm:text-3xl">{T.title}</h1>
-            </div>
-            
-            <div className="flex-shrink-0 my-6 flex justify-center">
+            <div className="flex-shrink-0 mb-6 flex justify-center">
                 <Tabs 
                     tabs={tabs}
                     activeTab={activeTab}

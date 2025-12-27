@@ -141,11 +141,11 @@ const StaffMonoklixView: React.FC<StaffMonoklixViewProps> = ({ language }) => {
     const leftPanel = (
         <>
             <div>
-                <h1 className="text-xl font-bold sm:text-3xl">{T.title}</h1>
-                <p className="text-sm sm:text-base text-neutral-500 dark:text-neutral-400 mt-1">{T.subtitle}</p>
+                <h1 className="text-lg font-bold sm:text-xl lg:text-3xl">{T.title}</h1>
+                <p className="text-xs sm:text-sm lg:text-base text-neutral-500 dark:text-neutral-400 mt-0.5 sm:mt-1">{T.subtitle}</p>
             </div>
 
-            <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
                 {aiAgents.map(agent => {
                     const isSelected = agent.id === selectedAgentId;
                     return (
@@ -155,22 +155,22 @@ const StaffMonoklixView: React.FC<StaffMonoklixViewProps> = ({ language }) => {
                                 setSelectedAgentId(agent.id);
                                 setUserInput('');
                             }}
-                            className={`p-4 rounded-lg text-center border-2 transition-all duration-200 ${
+                            className={`p-2 sm:p-3 rounded-lg text-center border-[0.5px] transition-all duration-200 ${
                                 isSelected 
-                                ? 'border-primary-500 bg-primary-50 dark:bg-primary-900/20 shadow-md transform scale-105' 
-                                : 'border-neutral-200 dark:border-neutral-700 bg-white dark:bg-neutral-800/50 hover:border-neutral-400 dark:hover:border-neutral-500'
+                                ? 'border-primary-500/80 bg-primary-50 dark:bg-primary-900/20 shadow-md transform scale-105' 
+                                : 'border-neutral-200/80 dark:border-neutral-700/80 bg-white dark:bg-neutral-800/50 hover:border-neutral-400/80 dark:hover:border-neutral-500/80'
                             }`}
                         >
-                            <agent.icon className={`w-6 h-6 mx-auto mb-2 ${isSelected ? 'text-primary-600 dark:text-primary-400' : 'text-neutral-500'}`} />
-                            <p className={`font-bold text-sm ${isSelected ? 'text-primary-700 dark:text-white' : 'text-neutral-800 dark:text-neutral-200'}`}>{agent.name}</p>
-                            <p className="text-xs text-neutral-500 dark:text-neutral-400">{agent.description}</p>
+                            <agent.icon className={`w-5 h-5 sm:w-6 sm:h-6 mx-auto mb-1 sm:mb-2 ${isSelected ? 'text-primary-600 dark:text-primary-400' : 'text-neutral-500'}`} />
+                            <p className={`font-bold text-xs sm:text-sm ${isSelected ? 'text-primary-700 dark:text-white' : 'text-neutral-800 dark:text-neutral-200'}`}>{agent.name}</p>
+                            <p className="text-[10px] sm:text-xs text-neutral-500 dark:text-neutral-400 leading-tight">{agent.description}</p>
                         </button>
                     )
                 })}
             </div>
 
             <div>
-                <label htmlFor="agent-input" className="block text-sm font-medium text-gray-600 dark:text-gray-400 mb-2">
+                <label htmlFor="agent-input" className="block text-xs sm:text-sm font-medium text-gray-600 dark:text-gray-400 mb-1 sm:mb-2">
                     {T.inputFor} {selectedAgent.name}
                 </label>
                 <textarea
@@ -178,43 +178,43 @@ const StaffMonoklixView: React.FC<StaffMonoklixViewProps> = ({ language }) => {
                     value={userInput}
                     onChange={(e) => setUserInput(e.target.value)}
                     placeholder={selectedAgent.placeholder}
-                    rows={6}
-                    className="w-full bg-gray-50 dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded-lg p-3 focus:ring-2 focus:ring-primary-500 focus:outline-none transition"
+                    rows={4}
+                    className="w-full bg-gray-50 dark:bg-gray-800 border-[0.5px] border-gray-300/80 dark:border-gray-700/80 rounded-lg p-2 sm:p-3 text-sm focus:ring-2 focus:ring-primary-500 focus:outline-none transition"
                 />
             </div>
 
             <div>
-                <label htmlFor="agent-language" className="block text-sm font-medium text-gray-600 dark:text-gray-400 mb-2">
+                <label htmlFor="agent-language" className="block text-xs sm:text-sm font-medium text-gray-600 dark:text-gray-400 mb-1 sm:mb-2">
                     {T.outputLanguage}
                 </label>
                 <select
                     id="agent-language"
                     value={selectedLanguage}
                     onChange={(e) => setSelectedLanguage(e.target.value)}
-                    className="w-full bg-gray-50 dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded-lg p-3 focus:ring-2 focus:ring-primary-500 focus:outline-none transition"
+                    className="w-full bg-gray-50 dark:bg-gray-800 border-[0.5px] border-gray-300/80 dark:border-gray-700/80 rounded-lg p-2 sm:p-3 text-sm focus:ring-2 focus:ring-primary-500 focus:outline-none transition"
                 >
                     {languages.map(lang => <option key={lang} value={lang}>{lang}</option>)}
                 </select>
             </div>
             
-            <div className="pt-4 mt-auto">
-                <div className="flex gap-4">
+            <div className="pt-2 sm:pt-4 mt-auto">
+                <div className="flex gap-2 sm:gap-4">
                     <button
                         onClick={handleGenerate}
                         disabled={isLoading}
-                        className="w-full flex items-center justify-center gap-2 bg-primary-600 text-white font-semibold py-3 px-4 rounded-lg hover:bg-primary-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                        className="w-full flex items-center justify-center gap-2 bg-primary-600 text-white font-semibold py-2 sm:py-3 px-3 sm:px-4 rounded-lg hover:bg-primary-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed text-sm sm:text-base"
                     >
                         {isLoading ? <Spinner /> : T.generateButton}
                     </button>
                     <button
                         onClick={handleReset}
                         disabled={isLoading}
-                        className="flex-shrink-0 bg-neutral-200 dark:bg-neutral-700 text-neutral-700 dark:text-neutral-200 font-semibold py-3 px-4 rounded-lg hover:bg-neutral-300 dark:hover:bg-neutral-600 transition-colors disabled:opacity-50"
+                        className="flex-shrink-0 bg-neutral-200 dark:bg-neutral-700 text-neutral-700 dark:text-neutral-200 font-semibold py-2 sm:py-3 px-3 sm:px-4 rounded-lg hover:bg-neutral-300 dark:hover:bg-neutral-600 transition-colors disabled:opacity-50 text-sm sm:text-base"
                     >
                         {T.resetButton}
                     </button>
                 </div>
-                {error && error !== 'Failed' && <p className="text-red-500 dark:text-red-400 mt-2 text-center">{error}</p>}
+                {error && error !== 'Failed' && <p className="text-red-500 dark:text-red-400 mt-1 sm:mt-2 text-center text-xs sm:text-sm">{error}</p>}
             </div>
         </>
     );
