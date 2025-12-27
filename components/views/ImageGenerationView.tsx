@@ -209,6 +209,80 @@ const ImageGenerationView: React.FC<ImageGenerationViewProps> = ({ onCreateVideo
       return resultImage;
   }, [isEditing, prompt, referenceImages, negativePrompt, aspectRatio, creativeState]);
 
+  // Optimized function that uses pre-uploaded media IDs
+  const generateOneImageWithMediaIds = useCallback(async (
+      index: number,
+      serverUrl: string | undefined,
+      mediaIds: string[],
+      authToken: string | undefined,
+      mediaServerUrl: string | undefined
+  ) => {
+      try {
+          const creativeDetails = Object.entries(creativeState)
+            .filter(([key, value]) => key !== 'creativityLevel' && value !== 'Random' && value !== 'None')
+            .map(([, value]) => value)
+            .join(', ');
+          
+          const promptWithCreativity = [prompt, creativeDetails].filter(Boolean).join(', ');
+          const fullPrompt = negativePrompt ? `${promptWithCreativity}, negative prompt: ${negativePrompt}` : promptWithCreativity;
+          const editingPrompt = getImageEditingPrompt(fullPrompt);
+
+          // Build recipe media inputs using pre-uploaded media IDs
+          const recipeMediaInputs = mediaIds.map((mediaId, i) => ({
+              caption: 'image to edit',
+              mediaInput: {
+                  mediaCategory: 'MEDIA_CATEGORY_SUBJECT',
+                  mediaGenerationId: mediaId
+              }
+          }));
+
+          // Use runImageRecipe directly with pre-uploaded media IDs
+          const { runImageRecipe } = await import('../../services/imagenV3Service');
+          const result = await runImageRecipe({
+              userInstruction: editingPrompt,
+              recipeMediaInputs,
+              config: {
+                  aspectRatio,
+                  authToken: authToken, // Use the token that owns the media IDs
+                  serverUrl: serverUrl || mediaServerUrl // Use recipe server or fallback to media server
+              }
+          });
+          
+          const resultImage = result.imagePanels?.[0]?.generatedImages?.[0]?.encodedImage;
+
+          if (!resultImage) {
+              throw new Error("The AI did not return an image.");
+          }
+          
+          await addHistoryItem({
+              type: 'Image',
+              prompt: isEditing ? `Image Edit: ${prompt}` : `Image Generation: ${prompt}`,
+              result: resultImage
+          });
+
+          const updateResult = await incrementImageUsage(currentUser);
+          if (updateResult.success && updateResult.user) {
+              onUserUpdate(updateResult.user);
+          }
+
+          setImages(prev => {
+              const newImages = [...prev];
+              newImages[index] = resultImage;
+              return newImages;
+          });
+          setProgress(prev => prev + 1);
+
+      } catch (e) {
+          const userFriendlyMessage = handleApiError(e);
+          setImages(prev => {
+              const newImages = [...prev];
+              newImages[index] = { error: userFriendlyMessage };
+              return newImages;
+          });
+          setProgress(prev => prev + 1);
+      }
+  }, [isEditing, prompt, negativePrompt, aspectRatio, creativeState, currentUser, onUserUpdate]);
+
   const generateOneImage = useCallback(async (index: number, serverUrl?: string) => {
       try {
           const resultImage = await performGeneration(serverUrl);
@@ -254,15 +328,94 @@ const ImageGenerationView: React.FC<ImageGenerationViewProps> = ({ onCreateVideo
     setSelectedImageIndex(0);
     setProgress(0);
 
-    const servers = UI_SERVER_LIST;
+    // OPTIMIZATION: Upload reference images ONCE and reuse media IDs for all output images
+    // This reduces uploads from (referenceImages.length × numberOfImages) to just referenceImages.length
+    let sharedMediaIds: string[] = [];
+    let sharedToken: string | undefined;
+    let sharedServerUrl: string | undefined;
+    
+    if (isEditing && referenceImages.length > 0 && (numberOfImages > 1 || referenceImages.length > 1)) {
+        try {
+            const { uploadImageForImagen } = await import('../../services/imagenV3Service');
+            const { cropImageToAspectRatio } = await import('../../services/imageService');
+            
+            // Upload all reference images once
+            for (let i = 0; i < referenceImages.length; i++) {
+                const img = referenceImages[i];
+                let processedBase64 = img.base64;
+                try {
+                    processedBase64 = await cropImageToAspectRatio(img.base64, aspectRatio || '1:1');
+                } catch (cropError) {
+                    console.warn(`Failed to process reference image ${i + 1}, using original`, cropError);
+                }
+                
+                const uploadResult = await uploadImageForImagen(
+                    processedBase64,
+                    img.mimeType,
+                    sharedToken, // Use same token for all uploads
+                    undefined,
+                    sharedServerUrl // Use same server for all uploads
+                );
+                
+                sharedMediaIds.push(uploadResult.mediaId);
+                if (!sharedToken) {
+                    sharedToken = uploadResult.successfulToken;
+                    sharedServerUrl = uploadResult.successfulServerUrl;
+                }
+            }
+            console.log(`📤 [Optimization] Uploaded ${referenceImages.length} reference images once. Will reuse for ${numberOfImages} output images.`);
+        } catch (uploadError) {
+            console.error('Failed to upload shared reference images:', uploadError);
+            // Fallback to original method
+            sharedMediaIds = [];
+        }
+    }
+
+    // Check if user selected localhost server
+    const selectedServer = sessionStorage.getItem('selectedProxyServer');
+    const isLocalhost = selectedServer?.includes('localhost');
+    
+    // Multi-Server Distribution: Randomly distribute requests across different servers
+    // If user selected localhost, use localhost for all requests (no distribution)
+    const serverUrls: (string | undefined)[] = [];
+    
+    if (isLocalhost) {
+        // User selected localhost - use localhost for all requests
+        for (let i = 0; i < numberOfImages; i++) {
+            serverUrls.push(selectedServer);
+        }
+        console.log(`🚀 [Localhost] Using localhost server for all ${numberOfImages} image generation requests`);
+    } else {
+        // Filter out localhost server for production multi-server distribution
+        const availableServers = UI_SERVER_LIST
+            .map(s => s.url)
+            .filter(url => !url.includes('localhost'));
+        
+        if (availableServers.length > 0) {
+            for (let i = 0; i < numberOfImages; i++) {
+                // Randomly select a server for each image
+                const randomIndex = Math.floor(Math.random() * availableServers.length);
+                serverUrls.push(availableServers[randomIndex]);
+            }
+        } else {
+            for (let i = 0; i < numberOfImages; i++) {
+                serverUrls.push(undefined);
+            }
+        }
+        console.log(`🚀 [Multi-Server] Randomly distributing ${numberOfImages} image generation requests across ${availableServers.length} servers:`, serverUrls);
+    }
+    
     const promises = [];
     for (let i = 0; i < numberOfImages; i++) {
-        // Distribute requests across available servers
-        const serverUrl = servers[i % servers.length].url;
         promises.push(new Promise<void>(resolve => {
             // Keep a small stagger to avoid flooding the client's network
             setTimeout(async () => {
-                await generateOneImage(i, serverUrl);
+                // Use optimized method if media IDs are available, otherwise use original
+                if (sharedMediaIds.length > 0 && (numberOfImages > 1 || referenceImages.length > 1)) {
+                    await generateOneImageWithMediaIds(i, serverUrls[i], sharedMediaIds, sharedToken, sharedServerUrl);
+                } else {
+                    await generateOneImage(i, serverUrls[i]);
+                }
                 resolve();
             }, i * 500);
         }));
@@ -272,7 +425,7 @@ const ImageGenerationView: React.FC<ImageGenerationViewProps> = ({ onCreateVideo
 
     setIsLoading(false);
     setStatusMessage('');
-  }, [numberOfImages, isEditing, prompt, generateOneImage]);
+  }, [numberOfImages, isEditing, prompt, generateOneImage, referenceImages, aspectRatio]);
   
   const handleRetry = useCallback(async (index: number) => {
     setImages(prev => {

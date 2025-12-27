@@ -101,7 +101,7 @@ const ProductPhotoView: React.FC<ProductPhotoViewProps> = ({ onReEdit, onCreateV
     setProductImage(null);
   }, []);
 
-  const performGeneration = async () => {
+  const performGeneration = async (serverUrl?: string) => {
       if (!productImage) throw new Error("No product image provided");
 
       const prompt = getProductPhotoPrompt({
@@ -112,7 +112,10 @@ const ProductPhotoView: React.FC<ProductPhotoViewProps> = ({ onReEdit, onCreateV
       const result = await editOrComposeWithImagen({
           prompt,
           images: [{ ...productImage, category: 'MEDIA_CATEGORY_SUBJECT', caption: 'product' }],
-          config: { aspectRatio }
+          config: { 
+              aspectRatio,
+              serverUrl: serverUrl // Pass server URL for multi-server distribution
+          }
       });
       const imageBase64 = result.imagePanels?.[0]?.generatedImages?.[0]?.encodedImage;
       
@@ -123,11 +126,79 @@ const ProductPhotoView: React.FC<ProductPhotoViewProps> = ({ onReEdit, onCreateV
       return { imageBase64, prompt };
   };
 
-  const generateOneImage = useCallback(async (index: number) => {
+  // Optimized function that uses pre-uploaded media ID
+  const generateOneImageWithMediaId = useCallback(async (
+    index: number, 
+    serverUrl: string | undefined,
+    productMediaId: string,
+    authToken: string | undefined,
+    mediaServerUrl: string | undefined
+  ) => {
+    if (!productMediaId) return;
+
+    try {
+        const prompt = getProductPhotoPrompt({
+            customPrompt,
+            creativeDirection: creativeState
+        });
+
+        const { runImageRecipe } = await import('../../services/imagenV3Service');
+        const result = await runImageRecipe({
+            userInstruction: prompt,
+            recipeMediaInputs: [{
+                caption: 'product',
+                mediaInput: {
+                    mediaCategory: 'MEDIA_CATEGORY_SUBJECT',
+                    mediaGenerationId: productMediaId
+                }
+            }],
+            config: {
+                aspectRatio,
+                authToken: authToken,
+                serverUrl: serverUrl || mediaServerUrl
+            }
+        });
+        
+        const imageBase64 = result.imagePanels?.[0]?.generatedImages?.[0]?.encodedImage;
+        
+        if (!imageBase64) {
+            throw new Error("The AI did not return an image. Please try a different prompt.");
+        }
+        
+        await addHistoryItem({
+            type: 'Image',
+            prompt: `Product Photo: ${prompt.substring(0, 50)}...`,
+            result: imageBase64
+        });
+        
+        const updateResult = await incrementImageUsage(currentUser);
+        if (updateResult.success && updateResult.user) {
+            onUserUpdate(updateResult.user);
+        }
+
+        setImages(prev => {
+            const newImages = [...prev];
+            newImages[index] = imageBase64;
+            return newImages;
+        });
+        setProgress(prev => prev + 1);
+
+    } catch (e) {
+        const errorMessage = handleApiError(e);
+        setImages(prev => {
+            const newImages = [...prev];
+            newImages[index] = { error: errorMessage };
+            return newImages;
+        });
+        setProgress(prev => prev + 1);
+    }
+  }, [creativeState, customPrompt, aspectRatio, currentUser, onUserUpdate]);
+
+  const generateOneImage = useCallback(async (index: number, serverUrl?: string) => {
     if (!productImage) return;
 
     try {
-        const { imageBase64, prompt } = await performGeneration();
+        const { imageBase64, prompt } = await performGeneration(serverUrl);
         
         await addHistoryItem({
             type: 'Image',
@@ -169,20 +240,91 @@ const ProductPhotoView: React.FC<ProductPhotoViewProps> = ({ onReEdit, onCreateV
     setSelectedImageIndex(0);
     setProgress(0);
 
+    // OPTIMIZATION: Upload product image ONCE and reuse media ID for all images (if numberOfImages > 1)
+    let sharedProductMediaId: string | null = null;
+    let sharedToken: string | undefined;
+    let sharedServerUrl: string | undefined;
+    
+    if (numberOfImages > 1) {
+        try {
+            const { uploadImageForImagen } = await import('../../services/imagenV3Service');
+            const { cropImageToAspectRatio } = await import('../../services/imageService');
+            
+            let processedBase64 = productImage.base64;
+            try {
+                processedBase64 = await cropImageToAspectRatio(productImage.base64, aspectRatio || '1:1');
+            } catch (cropError) {
+                console.warn('Failed to process product image, using original', cropError);
+            }
+            
+            const uploadResult = await uploadImageForImagen(
+                processedBase64,
+                productImage.mimeType
+            );
+            sharedProductMediaId = uploadResult.mediaId;
+            sharedToken = uploadResult.successfulToken;
+            sharedServerUrl = uploadResult.successfulServerUrl;
+            console.log(`📤 [Optimization] Uploaded product image once. MediaId: ${sharedProductMediaId.substring(0, 20)}...`);
+        } catch (uploadError) {
+            console.error('Failed to upload shared product image:', uploadError);
+            // Fallback to original method
+            sharedProductMediaId = null;
+        }
+    }
+
+    // Check if user selected localhost server
+    const selectedServer = sessionStorage.getItem('selectedProxyServer');
+    const isLocalhost = selectedServer?.includes('localhost');
+    
+    // Multi-Server Distribution: Randomly distribute requests across different servers
+    // If user selected localhost, use localhost for all requests (no distribution)
+    const serverUrls: (string | undefined)[] = [];
+    
+    if (isLocalhost) {
+        // User selected localhost - use localhost for all requests
+        for (let i = 0; i < numberOfImages; i++) {
+            serverUrls.push(selectedServer);
+        }
+        console.log(`🚀 [Localhost] Using localhost server for all ${numberOfImages} image generation requests`);
+    } else {
+        // Filter out localhost server for production multi-server distribution
+        const availableServers = UI_SERVER_LIST
+            .map(s => s.url)
+            .filter(url => !url.includes('localhost'));
+        
+        if (availableServers.length > 0) {
+            for (let i = 0; i < numberOfImages; i++) {
+                // Randomly select a server for each image
+                const randomIndex = Math.floor(Math.random() * availableServers.length);
+                serverUrls.push(availableServers[randomIndex]);
+            }
+        } else {
+            for (let i = 0; i < numberOfImages; i++) {
+                serverUrls.push(undefined);
+            }
+        }
+        console.log(`🚀 [Multi-Server] Randomly distributing ${numberOfImages} image generation requests across ${availableServers.length} servers:`, serverUrls);
+    }
+
     const promises = [];
     for (let i = 0; i < numberOfImages; i++) {
         promises.push(new Promise<void>(resolve => {
             setTimeout(async () => {
-                await generateOneImage(i);
+                // Use optimized method if media ID is available, otherwise use original
+                if (sharedProductMediaId && numberOfImages > 1) {
+                    await generateOneImageWithMediaId(i, serverUrls[i], sharedProductMediaId, sharedToken, sharedServerUrl);
+                } else {
+                    await generateOneImage(i, serverUrls[i]);
+                }
                 resolve();
-            }, i * 1200);
+            }, i * 500);
         }));
     }
 
     await Promise.all(promises);
 
     setIsLoading(false);
-  }, [numberOfImages, productImage, generateOneImage]);
+  }, [numberOfImages, productImage, generateOneImage, aspectRatio]);
   
   const handleRetry = useCallback(async (index: number) => {
     setImages(prev => {

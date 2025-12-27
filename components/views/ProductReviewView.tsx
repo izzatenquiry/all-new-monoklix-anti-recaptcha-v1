@@ -293,7 +293,103 @@ const ProductReviewView: React.FC<ProductReviewViewProps> = ({ onReEdit, onCreat
     }
   };
 
-    const generateSceneImage = async (index: number) => {
+    // New optimized function that uses pre-uploaded media IDs
+    const generateSceneImageWithMediaIds = async (
+        index: number, 
+        serverUrl: string | undefined,
+        productMediaId: string | null,
+        faceMediaId: string | null,
+        authToken: string | undefined,
+        mediaServerUrl: string | undefined
+    ) => {
+        if (!productMediaId || !parsedScenes[index]) return;
+
+        setImageLoadingStatus(prev => {
+            const newStatus = [...prev];
+            newStatus[index] = true;
+            return newStatus;
+        });
+        setImageGenerationErrors(prev => {
+            const newErrors = [...prev];
+            newErrors[index] = null;
+            return newErrors;
+        });
+
+        try {
+            const prompt = getProductReviewImagePrompt({
+                productDesc,
+                sceneDescription: parsedScenes[index],
+                includeModel,
+                creativeDirection: creativeState
+            });
+            
+            // Build recipe media inputs using pre-uploaded media IDs
+            const recipeMediaInputs = [
+                {
+                    caption: 'product',
+                    mediaInput: {
+                        mediaCategory: 'MEDIA_CATEGORY_SUBJECT',
+                        mediaGenerationId: productMediaId
+                    }
+                }
+            ];
+            
+            if (includeModel === 'Yes' && faceMediaId) {
+                recipeMediaInputs.push({
+                    caption: 'model face',
+                    mediaInput: {
+                        mediaCategory: 'MEDIA_CATEGORY_SUBJECT',
+                        mediaGenerationId: faceMediaId
+                    }
+                });
+            }
+
+            // Use runImageRecipe directly with pre-uploaded media IDs
+            const { runImageRecipe } = await import('../../services/imagenV3Service');
+            const result = await runImageRecipe({
+                userInstruction: prompt,
+                recipeMediaInputs,
+                config: {
+                    aspectRatio: videoAspectRatio as '1:1' | '9:16' | '16:9',
+                    authToken: authToken, // Use the token that owns the media IDs
+                    serverUrl: serverUrl || mediaServerUrl // Use recipe server or fallback to media server
+                }
+            });
+            const imageBase64 = result.imagePanels?.[0]?.generatedImages?.[0]?.encodedImage;
+
+            if (!imageBase64) {
+                throw new Error("The AI did not return an image. Please try a different prompt.");
+            }
+            
+            await addHistoryItem({ type: 'Image', prompt: `Storyboard Scene ${index + 1}: ${parsedScenes[index].substring(0, 50)}...`, result: imageBase64 });
+
+            const updateResult = await incrementImageUsage(currentUser);
+            if (updateResult.success && updateResult.user) {
+                onUserUpdate(updateResult.user);
+            }
+
+            setGeneratedImages(prev => {
+                const newImages = [...prev];
+                newImages[index] = imageBase64;
+                return newImages;
+            });
+        } catch (e) {
+            const userFriendlyMessage = handleApiError(e);
+            setImageGenerationErrors(prev => {
+                const newErrors = [...prev];
+                newErrors[index] = userFriendlyMessage;
+                return newErrors;
+            });
+        } finally {
+            setImageLoadingStatus(prev => {
+                const newStatus = [...prev];
+                newStatus[index] = false;
+                return newStatus;
+            });
+        }
+    };
+
+    const generateSceneImage = async (index: number, serverUrl?: string) => {
         if (!productImage || !parsedScenes[index]) return;
 
         setImageLoadingStatus(prev => {
@@ -321,10 +417,14 @@ const ProductReviewView: React.FC<ProductReviewViewProps> = ({ onReEdit, onCreat
             }
 
             // The executeProxiedRequest within editOrComposeWithImagen handles all token logic.
+            // If serverUrl is provided, use it for multi-server distribution
             const result = await editOrComposeWithImagen({
                 prompt,
                 images: imagesToCompose,
-                config: { aspectRatio: videoAspectRatio as '1:1' | '9:16' | '16:9' }
+                config: { 
+                    aspectRatio: videoAspectRatio as '1:1' | '9:16' | '16:9',
+                    serverUrl: serverUrl // Pass server URL for multi-server distribution
+                }
             });
             const imageBase64 = result.imagePanels?.[0]?.generatedImages?.[0]?.encodedImage;
 
@@ -431,13 +531,110 @@ const ProductReviewView: React.FC<ProductReviewViewProps> = ({ onReEdit, onCreat
   const handleGenerateAllImages = async () => {
     setIsGeneratingImages(true);
     
-    // Fire parallel requests with staggered timing
+    // Check if user selected localhost server
+    const selectedServer = sessionStorage.getItem('selectedProxyServer');
+    const isLocalhost = selectedServer?.includes('localhost');
+    
+    // OPTIMIZATION: Upload shared images (product + face) ONCE and reuse media IDs for all scenes
+    // This reduces uploads from 8 (4 scenes × 2 images) to just 2 (1 product + 1 face)
+    let sharedProductMediaId: string | null = null;
+    let sharedFaceMediaId: string | null = null;
+    let sharedToken: string | undefined;
+    let sharedServerUrl: string | undefined;
+    
+    try {
+        // Upload product image once
+        if (productImage) {
+            const { uploadImageForImagen } = await import('../../services/imagenV3Service');
+            const { cropImageToAspectRatio } = await import('../../services/imageService');
+            
+            let processedBase64 = productImage.base64;
+            try {
+                processedBase64 = await cropImageToAspectRatio(productImage.base64, videoAspectRatio || '1:1');
+            } catch (cropError) {
+                console.warn('Failed to process product image, using original', cropError);
+            }
+            
+            const uploadResult = await uploadImageForImagen(
+                processedBase64,
+                productImage.mimeType,
+                undefined,
+                undefined,
+                isLocalhost ? selectedServer : undefined
+            );
+            sharedProductMediaId = uploadResult.mediaId;
+            sharedToken = uploadResult.successfulToken;
+            sharedServerUrl = uploadResult.successfulServerUrl;
+            console.log(`📤 [Optimization] Uploaded product image once. MediaId: ${sharedProductMediaId.substring(0, 20)}...`);
+        }
+        
+        // Upload face image once (if model is included)
+        if (includeModel === 'Yes' && faceImage) {
+            const { uploadImageForImagen } = await import('../../services/imagenV3Service');
+            const { cropImageToAspectRatio } = await import('../../services/imageService');
+            
+            let processedBase64 = faceImage.base64;
+            try {
+                processedBase64 = await cropImageToAspectRatio(faceImage.base64, videoAspectRatio || '1:1');
+            } catch (cropError) {
+                console.warn('Failed to process face image, using original', cropError);
+            }
+            
+            const uploadResult = await uploadImageForImagen(
+                processedBase64,
+                faceImage.mimeType,
+                sharedToken, // Use same token
+                undefined,
+                sharedServerUrl // Use same server
+            );
+            sharedFaceMediaId = uploadResult.mediaId;
+            console.log(`📤 [Optimization] Uploaded face image once. MediaId: ${sharedFaceMediaId.substring(0, 20)}...`);
+        }
+    } catch (uploadError) {
+        console.error('Failed to upload shared images:', uploadError);
+        setIsGeneratingImages(false);
+        return;
+    }
+    
+    // Multi-Server Distribution: Randomly distribute 4 recipe requests across different servers
+    // If user selected localhost, use localhost for all requests (no distribution)
+    const serverUrls: (string | undefined)[] = [];
+    
+    if (isLocalhost) {
+        // User selected localhost - use localhost for all requests
+        for (let i = 0; i < 4; i++) {
+            serverUrls.push(selectedServer);
+        }
+        console.log(`🚀 [Localhost] Using localhost server for all 4 recipe requests`);
+    } else {
+        // Filter out localhost server for production multi-server distribution
+        const availableServers = SERVERS
+            .map(s => s.url)
+            .filter(url => !url.includes('localhost'));
+        
+        // Random distribution for better load balancing
+        if (availableServers.length > 0) {
+            for (let i = 0; i < 4; i++) {
+                // Randomly select a server for each scene
+                const randomIndex = Math.floor(Math.random() * availableServers.length);
+                serverUrls.push(availableServers[randomIndex]);
+            }
+        } else {
+            // Fallback: no server override (use default)
+            for (let i = 0; i < 4; i++) {
+                serverUrls.push(undefined);
+            }
+        }
+        console.log(`🚀 [Multi-Server] Randomly distributing 4 recipe requests across ${availableServers.length} servers:`, serverUrls);
+    }
+    
+    // Fire parallel recipe requests with shared media IDs
     const promises = [];
     for (let i = 0; i < 4; i++) {
         if (parsedScenes[i]) {
             promises.push(new Promise<void>(resolve => {
                 setTimeout(async () => {
-                    await generateSceneImage(i);
+                    await generateSceneImageWithMediaIds(i, serverUrls[i], sharedProductMediaId, sharedFaceMediaId, sharedToken, sharedServerUrl);
                     resolve();
                 }, i * 500);
             }));
@@ -879,7 +1076,9 @@ const ProductReviewView: React.FC<ProductReviewViewProps> = ({ onReEdit, onCreat
                                     value={scene}
                                     onChange={(e) => handleSceneChange(index, e.target.value)}
                                     rows={6}
-                                    className="w-full bg-transparent text-sm font-sans whitespace-pre-wrap custom-scrollbar resize-y focus:outline-none focus:ring-1 focus:ring-primary-500 rounded-md p-2 -m-1"
+                                    readOnly={false}
+                                    className="w-full bg-transparent text-sm font-sans whitespace-pre-wrap custom-scrollbar resize-y focus:outline-none focus:ring-1 focus:ring-primary-500 rounded-md p-2 -m-1 cursor-text"
+                                    placeholder="Edit scene content here..."
                                 />
                             </div>
                         ))}

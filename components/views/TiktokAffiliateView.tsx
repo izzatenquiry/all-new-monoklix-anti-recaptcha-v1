@@ -140,7 +140,7 @@ const TiktokAffiliateView: React.FC<TiktokAffiliateViewProps> = ({ onReEdit, onC
         gender, modelFace, creativeState, customPrompt, numberOfImages, aspectRatio
     ]);
 
-    const performGeneration = async () => {
+    const performGeneration = async (serverUrl?: string) => {
         if (!productImage) throw new Error("No product image provided");
 
         const prompt = getTiktokAffiliatePrompt({
@@ -162,7 +162,10 @@ const TiktokAffiliateView: React.FC<TiktokAffiliateViewProps> = ({ onReEdit, onC
         const result = await editOrComposeWithImagen({
             prompt,
             images: imagesToCompose,
-            config: { aspectRatio }
+            config: { 
+                aspectRatio,
+                serverUrl: serverUrl // Pass server URL for multi-server distribution
+            }
         });
         const imageBase64 = result.imagePanels[0]?.generatedImages[0]?.encodedImage;
 
@@ -173,11 +176,91 @@ const TiktokAffiliateView: React.FC<TiktokAffiliateViewProps> = ({ onReEdit, onC
         return { imageBase64, prompt };
     };
 
-    const generateOneImage = useCallback(async (index: number) => {
+    // Optimized function that uses pre-uploaded media IDs
+    const generateOneImageWithMediaId = useCallback(async (
+        index: number,
+        serverUrl: string | undefined,
+        productMediaId: string,
+        faceMediaId: string | null,
+        authToken: string | undefined,
+        mediaServerUrl: string | undefined
+    ) => {
+        if (!productMediaId) return;
+    
+        try {
+            const prompt = getTiktokAffiliatePrompt({
+                gender,
+                modelFace,
+                customPrompt,
+                hasFaceImage: !!faceMediaId,
+                creativeDirection: creativeState
+            });
+
+            const recipeMediaInputs = [{
+                caption: 'product',
+                mediaInput: {
+                    mediaCategory: 'MEDIA_CATEGORY_SUBJECT',
+                    mediaGenerationId: productMediaId
+                }
+            }];
+
+            if (faceMediaId) {
+                recipeMediaInputs.push({
+                    caption: 'model face',
+                    mediaInput: {
+                        mediaCategory: 'MEDIA_CATEGORY_SUBJECT',
+                        mediaGenerationId: faceMediaId
+                    }
+                });
+            }
+
+            const { runImageRecipe } = await import('../../services/imagenV3Service');
+            const result = await runImageRecipe({
+                userInstruction: prompt,
+                recipeMediaInputs,
+                config: {
+                    aspectRatio,
+                    authToken: authToken,
+                    serverUrl: serverUrl || mediaServerUrl
+                }
+            });
+            
+            const imageBase64 = result.imagePanels?.[0]?.generatedImages?.[0]?.encodedImage;
+            
+            if (!imageBase64) {
+                throw new Error("The AI did not return an image. Please try a different prompt.");
+            }
+            
+            await addHistoryItem({ type: 'Image', prompt: `TikTok Affiliate: Vibe - ${creativeState.vibe}, Model - ${gender}`, result: imageBase64 });
+    
+            const updateResult = await incrementImageUsage(currentUser);
+            if (updateResult.success && updateResult.user) {
+                onUserUpdate(updateResult.user);
+            }
+
+            setImages(prev => {
+                const newImages = [...prev];
+                newImages[index] = imageBase64;
+                return newImages;
+            });
+            setProgress(prev => prev + 1);
+
+        } catch (e) {
+            const userFriendlyMessage = handleApiError(e);
+            setImages(prev => {
+                const newImages = [...prev];
+                newImages[index] = { error: userFriendlyMessage };
+                return newImages;
+            });
+            setProgress(prev => prev + 1);
+        }
+    }, [gender, modelFace, customPrompt, creativeState, aspectRatio, currentUser, onUserUpdate]);
+
+    const generateOneImage = useCallback(async (index: number, serverUrl?: string) => {
         if (!productImage) return;
     
         try {
-            const { imageBase64, prompt } = await performGeneration();
+            const { imageBase64, prompt } = await performGeneration(serverUrl);
             
             await addHistoryItem({ type: 'Image', prompt: `TikTok Affiliate: Vibe - ${creativeState.vibe}, Model - ${gender}`, result: imageBase64 });
     
@@ -215,20 +298,114 @@ const TiktokAffiliateView: React.FC<TiktokAffiliateViewProps> = ({ onReEdit, onC
         setSelectedImageIndex(0);
         setProgress(0);
 
+        // OPTIMIZATION: Upload product + face images ONCE and reuse media IDs for all images (if numberOfImages > 1)
+        let sharedProductMediaId: string | null = null;
+        let sharedFaceMediaId: string | null = null;
+        let sharedToken: string | undefined;
+        let sharedServerUrl: string | undefined;
+        
+        if (numberOfImages > 1) {
+            try {
+                const { uploadImageForImagen } = await import('../../services/imagenV3Service');
+                const { cropImageToAspectRatio } = await import('../../services/imageService');
+                
+                // Upload product image once
+                let processedBase64 = productImage.base64;
+                try {
+                    processedBase64 = await cropImageToAspectRatio(productImage.base64, aspectRatio || '1:1');
+                } catch (cropError) {
+                    console.warn('Failed to process product image, using original', cropError);
+                }
+                
+                const productUploadResult = await uploadImageForImagen(
+                    processedBase64,
+                    productImage.mimeType
+                );
+                sharedProductMediaId = productUploadResult.mediaId;
+                sharedToken = productUploadResult.successfulToken;
+                sharedServerUrl = productUploadResult.successfulServerUrl;
+                console.log(`📤 [Optimization] Uploaded product image once. MediaId: ${sharedProductMediaId.substring(0, 20)}...`);
+                
+                // Upload face image once (if available)
+                if (faceImage) {
+                    let processedFaceBase64 = faceImage.base64;
+                    try {
+                        processedFaceBase64 = await cropImageToAspectRatio(faceImage.base64, aspectRatio || '1:1');
+                    } catch (cropError) {
+                        console.warn('Failed to process face image, using original', cropError);
+                    }
+                    
+                    const faceUploadResult = await uploadImageForImagen(
+                        processedFaceBase64,
+                        faceImage.mimeType,
+                        sharedToken, // Use same token
+                        undefined,
+                        sharedServerUrl // Use same server
+                    );
+                    sharedFaceMediaId = faceUploadResult.mediaId;
+                    console.log(`📤 [Optimization] Uploaded face image once. MediaId: ${sharedFaceMediaId.substring(0, 20)}...`);
+                }
+            } catch (uploadError) {
+                console.error('Failed to upload shared images:', uploadError);
+                // Fallback to original method
+                sharedProductMediaId = null;
+                sharedFaceMediaId = null;
+            }
+        }
+
+        // Check if user selected localhost server
+        const selectedServer = sessionStorage.getItem('selectedProxyServer');
+        const isLocalhost = selectedServer?.includes('localhost');
+        
+        // Multi-Server Distribution: Randomly distribute requests across different servers
+        // If user selected localhost, use localhost for all requests (no distribution)
+        const serverUrls: (string | undefined)[] = [];
+        
+        if (isLocalhost) {
+            // User selected localhost - use localhost for all requests
+            for (let i = 0; i < numberOfImages; i++) {
+                serverUrls.push(selectedServer);
+            }
+            console.log(`🚀 [Localhost] Using localhost server for all ${numberOfImages} image generation requests`);
+        } else {
+            // Filter out localhost server for production multi-server distribution
+            const availableServers = UI_SERVER_LIST
+                .map(s => s.url)
+                .filter(url => !url.includes('localhost'));
+            
+            if (availableServers.length > 0) {
+                for (let i = 0; i < numberOfImages; i++) {
+                    // Randomly select a server for each image
+                    const randomIndex = Math.floor(Math.random() * availableServers.length);
+                    serverUrls.push(availableServers[randomIndex]);
+                }
+            } else {
+                for (let i = 0; i < numberOfImages; i++) {
+                    serverUrls.push(undefined);
+                }
+            }
+            console.log(`🚀 [Multi-Server] Randomly distributing ${numberOfImages} image generation requests across ${availableServers.length} servers:`, serverUrls);
+        }
+
         const promises = [];
         for (let i = 0; i < numberOfImages; i++) {
             promises.push(new Promise<void>(resolve => {
                 setTimeout(async () => {
-                    await generateOneImage(i);
+                    // Use optimized method if media IDs are available, otherwise use original
+                    if (sharedProductMediaId && numberOfImages > 1) {
+                        await generateOneImageWithMediaId(i, serverUrls[i], sharedProductMediaId, sharedFaceMediaId, sharedToken, sharedServerUrl);
+                    } else {
+                        await generateOneImage(i, serverUrls[i]);
+                    }
                     resolve();
-                }, i * 1200);
+                }, i * 500);
             }));
         }
 
         await Promise.all(promises);
 
         setIsLoading(false);
-    }, [numberOfImages, productImage, generateOneImage]);
+    }, [numberOfImages, productImage, faceImage, generateOneImage, aspectRatio]);
     
     const handleRetry = useCallback(async (index: number) => {
         setImages(prev => {

@@ -20,13 +20,13 @@ const Tabs = <T extends string>({ tabs, activeTab, setActiveTab, isAdmin = false
   const visibleTabs = tabs.filter(tab => !tab.adminOnly || isAdmin);
   
   return (
-    <div className="p-0.5 sm:p-1 bg-neutral-100 dark:bg-neutral-800 rounded-2xl flex items-center gap-0.5 sm:gap-1 overflow-x-auto border-[0.5px] border-neutral-200/80 dark:border-neutral-700/80 shadow-inner">
+    <div className="p-0.5 sm:p-1 bg-neutral-100 dark:bg-neutral-800 rounded-2xl flex items-center gap-0.5 sm:gap-1 overflow-x-auto border-[0.5px] border-neutral-200/80 dark:border-neutral-700/80 shadow-inner flex-nowrap">
         {visibleTabs.map(tab => (
             <button key={tab.id} onClick={() => setActiveTab(tab.id)}
-                className={`px-3 sm:px-4 lg:px-5 py-1.5 sm:py-2 lg:py-2.5 text-xs sm:text-sm font-semibold rounded-xl transition-all duration-300 whitespace-nowrap relative z-10 ${
+                className={`flex-shrink-0 px-3 sm:px-4 lg:px-5 py-1.5 sm:py-2 lg:py-2.5 text-xs sm:text-sm font-semibold rounded-xl transition-all duration-300 whitespace-nowrap relative z-10 ${
                     activeTab === tab.id
                         ? 'bg-white dark:bg-neutral-700 text-brand-start shadow-sm ring-[0.5px] ring-neutral-200/80 dark:ring-neutral-600/80'
-                        : 'text-neutral-500 dark:text-neutral-400 hover:text-neutral-800 dark:hover:text-neutral-200 hover:bg-neutral-200/50 dark:hover:bg-neutral-700/50'
+                        : 'bg-neutral-100 dark:bg-neutral-800 text-neutral-600 dark:text-neutral-400 hover:text-neutral-800 dark:hover:text-neutral-200'
                 }`}>
                 {tab.label}
                 {tab.count !== undefined && (
