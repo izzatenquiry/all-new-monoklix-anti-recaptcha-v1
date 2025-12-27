@@ -2,7 +2,6 @@ import { defineConfig, loadEnv } from 'vite';
 import react from '@vitejs/plugin-react';
 import { fileURLToPath, URL } from 'node:url';
 import process from 'node:process';
-import mkcert from 'vite-plugin-mkcert';
 
 export default defineConfig(({ mode }) => {
   // Load .env files in the current working directory, and filter for VITE_ prefixes.
@@ -20,8 +19,7 @@ export default defineConfig(({ mode }) => {
 
   return {
     plugins: [
-      react(),
-      mkcert() // Enable HTTPS with trusted certificate
+      react()
     ],
     // This 'define' block replaces occurrences of 'process.env.VAR' in the code
     // with the actual values at build time.
@@ -30,7 +28,7 @@ export default defineConfig(({ mode }) => {
       host: '0.0.0.0',
       port: Number(process.env.PORT) || 8080,
       strictPort: true,
-      https: true, // Enable HTTPS
+      https: false, // Use HTTP for localhost - explicitly set to false
       proxy: {
         '/api': {
           target: 'http://localhost:3001',
@@ -41,7 +39,7 @@ export default defineConfig(({ mode }) => {
     preview: {
       host: '0.0.0.0',
       port: 8080,
-      https: true, // Enable HTTPS for preview too
+      https: false, // Use HTTP for preview too
     },
     build: {
       outDir: 'dist',

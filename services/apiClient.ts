@@ -185,11 +185,14 @@ export const executeProxiedRequest = async (
   // Use override URL if provided, otherwise default to standard proxy selection
   const currentServerUrl = overrideServerUrl || (serviceType === 'veo' ? getVeoProxyUrl() : getImagenProxyUrl());
   
-  // 1. Get reCAPTCHA token if needed (for generation/upload requests and health checks)
+  // 1. Get reCAPTCHA token if needed (only for Veo GENERATE requests and health checks, not for UPLOAD or Imagen)
   const isGenerationRequest = logContext.includes('GENERATE') || logContext.includes('RECIPE') || logContext.includes('UPLOAD') || logContext.includes('HEALTH CHECK');
+  // For reCAPTCHA: only GENERATE and HEALTH CHECK for Veo (exclude UPLOAD)
+  const needsRecaptcha = (logContext.includes('GENERATE') || logContext.includes('HEALTH CHECK')) && serviceType === 'veo';
   let recaptchaToken: string | null = null;
 
-  if (isGenerationRequest) {
+  // Only get reCAPTCHA token for Veo GENERATE requests, not for UPLOAD or Imagen
+  if (needsRecaptcha) {
     // Extract projectId from request body if exists (MUST match for Google API validation)
     const projectIdFromBody = requestBody.clientContext?.projectId;
 
@@ -250,7 +253,12 @@ export const executeProxiedRequest = async (
 
   // 5. Execute
   try {
-      const endpoint = `${currentServerUrl}/api/${serviceType}${relativePath}`;
+      // When using localhost server, use relative path to leverage Vite proxy
+      // This avoids CORS and mixed content issues when frontend is HTTPS
+      const isLocalhostServer = currentServerUrl.includes('localhost:3001');
+      const endpoint = isLocalhostServer 
+          ? `/api/${serviceType}${relativePath}`  // Use proxy path for localhost
+          : `${currentServerUrl}/api/${serviceType}${relativePath}`;  // Use absolute URL for remote servers
       
       const response = await fetch(endpoint, {
           method: 'POST',
